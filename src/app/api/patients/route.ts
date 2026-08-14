@@ -56,6 +56,13 @@ export async function POST(req: NextRequest) {
   const { id, status, patch } = parsed.data;
   const existing = patientStore.get(id);
 
+  // Once a patient has submitted, that's terminal. A draft "active"/"inactive" ping from
+  // a debounced keystroke sent *before* submission can still resolve *after* it (network
+  // reordering), and would otherwise clobber the submitted record back to a draft state.
+  if (existing?.status === "submitted" && status !== "submitted") {
+    return NextResponse.json(existing);
+  }
+
   // Cast: while in draft (pre-submit), fields like `gender` may hold text that hasn't
   // settled into a valid enum value yet. `patientFormSchema` re-validates everything
   // for real once `status` is "submitted", so PatientData's stricter shape holds by then.
