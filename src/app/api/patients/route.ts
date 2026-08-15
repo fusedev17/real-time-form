@@ -36,7 +36,7 @@ const requestSchema = z.object({
 const idSchema = z.string().trim().min(1).max(100);
 
 export async function GET() {
-  const patients = Array.from(patientStore.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+  const patients = (await patientStore.values()).sort((a, b) => b.updatedAt - a.updatedAt);
   return NextResponse.json(patients);
 }
 
@@ -54,14 +54,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { id, status, patch } = parsed.data;
-  const existing = patientStore.get(id);
-
-  // Once a patient has submitted, that's terminal. A draft "active"/"inactive" ping from
-  // a debounced keystroke sent *before* submission can still resolve *after* it (network
-  // reordering), and would otherwise clobber the submitted record back to a draft state.
-  if (existing?.status === "submitted" && status !== "submitted") {
-    return NextResponse.json(existing);
-  }
+  const existing = await patientStore.get(id);
 
   // Cast: while in draft (pre-submit), fields like `gender` may hold text that hasn't
   // settled into a valid enum value yet. `patientFormSchema` re-validates everything
@@ -93,11 +86,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  patientStore.set(id, merged);
+  // Atomic in Redis: if another request already marked this patient "submitted", this
+  // write is rejected and `saved` comes back as that submitted record unchanged, instead
+  // of racing a plain get-then-set from Node (which two concurrent serverless instances
+  // could both pass before either has written).
+  const saved = await patientStore.setUnlessSubmitted(id, merged);
 
-  await pusherServer.trigger(PATIENTS_CHANNEL, PATIENT_UPDATE_EVENT, merged);
+  await pusherServer.trigger(PATIENTS_CHANNEL, PATIENT_UPDATE_EVENT, saved);
 
-  return NextResponse.json(merged);
+  return NextResponse.json(saved);
 }
 
 export async function DELETE(req: NextRequest) {
@@ -108,8 +105,10 @@ export async function DELETE(req: NextRequest) {
   }
 
   const id = parsed.data;
-  patientStore.delete(id);
-  await pusherServer.trigger(PATIENTS_CHANNEL, PATIENT_REMOVE_EVENT, { id });
+  const deleted = await patientStore.deleteUnlessSubmitted(id);
+  if (deleted) {
+    await pusherServer.trigger(PATIENTS_CHANNEL, PATIENT_REMOVE_EVENT, { id });
+  }
 
   return NextResponse.json({ ok: true });
 }

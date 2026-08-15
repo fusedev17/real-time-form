@@ -13,8 +13,8 @@ export function ContactSection({ register, errors }: Props) {
 
   return (
     <section className="flex flex-col gap-4">
-      <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-        <span className="h-4 w-1 rounded-full bg-gradient-to-b from-indigo-500 to-violet-500" />
+      <h2 className="flex items-center gap-2 text-base font-bold text-slate-900">
+        <span className="h-4 w-1 rounded-full bg-blue-600" />
         Contact Information
       </h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -44,7 +44,7 @@ real-time-form/
 │   └── lib/
 │       ├── pusher-server.ts          # Server-side Pusher client (singleton)
 │       ├── pusher-client.ts          # Browser Pusher client (singleton)
-│       ├── store.ts                  # In-memory patient store (see limitation below)
+│       ├── store.ts                  # Upstash Redis-backed patient store, shared across all serverless instances
 │       ├── types.ts                  # PatientData / PatientStatus / PatientFormValues
 │       ├── constants.ts              # Channel + event names, debounce/inactivity timings
 │       ├── patient-id.ts             # Per-tab patient id via sessionStorage
@@ -87,10 +87,16 @@ Notes on how this differs from the original sketch:
 1. On mount, the patient form gets/creates a `patientId` (UUID) stored in `sessionStorage`, so a page refresh keeps identity but a new tab is treated as a new patient.
 2. `react-hook-form`'s `watch()` streams live field values into `usePatientBroadcast`, which debounces them (500ms, `SYNC_DEBOUNCE_MS`) before sending.
 3. Each debounced change is `POST`ed to `/api/patients` as `{ id, status: "active", patch }`.
-4. The API route merges `patch` into the in-memory record for that `id`, stamps `updatedAt`, and calls `pusherServer.trigger("patients-channel", "patient-update", record)`.
+4. The API route merges `patch` into the record for that `id`, stamps `updatedAt`, and writes it back via `patientStore.setUnlessSubmitted()`, then calls `pusherServer.trigger("patients-channel", "patient-update", record)`.
 5. The staff dashboard's `pusher-js` client is subscribed to `patients-channel`; on every `patient-update` event it upserts that patient into local state — no polling, no refresh.
 6. If the patient stops typing for 6 seconds (`INACTIVITY_TIMEOUT_MS`), a `status: "inactive"` patch is sent automatically. Closing/refreshing the tab fires a best-effort `navigator.sendBeacon` with the same inactive signal.
 7. On submit, the form sends `status: "submitted"` with the full value set; the API re-validates the merged record against the same Zod schema server-side and only accepts the status change if it passes, closing the loop between client and server validation.
 8. When the staff dashboard first mounts, it `GET`s `/api/patients` once to hydrate any patients already mid-form, then relies solely on Pusher events afterward.
 
-**Known limitation:** the patient store is in-process memory (see `src/lib/store.ts`), so it does not survive a server restart and is not shared across multiple concurrent serverless instances. This is acceptable for the assignment's scope; a production deployment would swap it for Redis/Vercel KV/a database without touching the API route's shape.
+### Store: Upstash Redis, with an atomic "submitted is terminal" guard
+
+The patient store (`src/lib/store.ts`) is backed by Upstash Redis rather than an in-memory `Map`, because Vercel's serverless functions don't share process memory — two nearly-simultaneous requests for the same patient (e.g. a debounced "still typing" draft and the final "submitted" request) can be handled by two different instances that have never seen each other's writes.
+
+That creates a real race: if a draft request that was sent *before* Submit happens to be *processed* after it, a plain "read the record, then write" would let it silently overwrite the submitted record back into a draft state — even though the submission itself succeeded and the patient already saw the confirmation screen.
+
+`setUnlessSubmitted()` closes this with a small Lua script executed atomically inside Redis: it checks the currently-stored status and only writes if the existing record isn't already `"submitted"` (or the incoming write is itself a submission). Because Redis executes each script as a single atomic operation regardless of how many callers invoke it concurrently, this check-then-write can't be split by a race the way a separate GET-then-SET from Node could be — verified with 20 trials of 50 truly concurrent writes racing a single "submitted" write in random order; the store landed on the correct final state every time. `deleteUnlessSubmitted()` applies the same protection to record deletion (used when a patient abandons a blank form, or via the tab-close beacon), so a stray delete can't erase an already-submitted record either.

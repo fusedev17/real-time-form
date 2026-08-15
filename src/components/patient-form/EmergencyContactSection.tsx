@@ -13,8 +13,8 @@ export function EmergencyContactSection({ register, errors }: Props) {
 
   return (
     <section className="flex flex-col gap-4">
-      <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-        <span className="h-4 w-1 rounded-full bg-gradient-to-b from-indigo-500 to-violet-500" />
+      <h2 className="flex items-center gap-2 text-base font-bold text-slate-900">
+        <span className="h-4 w-1 rounded-full bg-blue-600" />
         Emergency Contact <span className="text-xs font-normal text-slate-400">(optional)</span>
       </h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

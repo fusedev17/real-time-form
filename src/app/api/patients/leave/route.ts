@@ -26,8 +26,10 @@ export async function POST(req: NextRequest) {
   }
 
   const { id } = parsed.data;
-  patientStore.delete(id);
-  await pusherServer.trigger(PATIENTS_CHANNEL, PATIENT_REMOVE_EVENT, { id });
+  const deleted = await patientStore.deleteUnlessSubmitted(id);
+  if (deleted) {
+    await pusherServer.trigger(PATIENTS_CHANNEL, PATIENT_REMOVE_EVENT, { id });
+  }
 
   return NextResponse.json({ ok: true });
 }

@@ -2,85 +2,60 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden bg-[#f4f3ee]">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.5]"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, #00000009 1px, transparent 1px), linear-gradient(to bottom, #00000009 1px, transparent 1px)",
-          backgroundSize: "56px 56px",
-        }}
-      />
-
-      <div className="relative flex flex-1 flex-col items-center px-4 pt-20 pb-12 sm:pt-28">
-        <span className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-[#faf9f5] px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-[#5b5a52]">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#c8683f]" />
-          Front Desk · Registration Kiosk 2
-        </span>
-
-        <h1 className="mt-8 max-w-3xl text-center font-serif text-5xl leading-[1.1] text-[#20241f] italic sm:text-6xl">
-          Two views.
-          <br />
-          One patient, <span className="not-italic text-[#5c7360]">zero delay.</span>
-        </h1>
-
-        <p className="mt-6 max-w-lg text-center text-[15px] leading-relaxed text-[#6b6a61]">
-          The tablet at check-in and the monitor at the nurse station show the same patient, at
-          the same time — no paper clipboard, no calling a name into the waiting room.
-        </p>
-
-        <div className="mt-14 grid w-full max-w-3xl grid-cols-1 gap-6 sm:grid-cols-2">
-          <Link
-            href="/patient"
-            className="group flex flex-col rounded-2xl border border-black/10 bg-[#fbfaf7] p-7 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_24px_rgba(0,0,0,0.06)]"
+    <div className="flex flex-1 flex-col bg-slate-50">
+      <header className="flex justify-end px-4 pt-4 sm:px-6">
+        <Link
+          href="/staff"
+          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+            aria-hidden
           >
-            <span className="font-mono text-[11px] uppercase tracking-[0.15em] text-[#5c7360]">
-              Check-In
-            </span>
-            <span className="mt-2 font-serif text-2xl font-semibold text-[#20241f]">
-              Registration Form
-            </span>
-            <p className="mt-3 text-sm leading-relaxed text-[#6b6a61]">
-              Hand the tablet to a patient at arrival. Name, contact, and emergency details save
-              as they type, no submit-and-hope.
-            </p>
-            <span className="mt-6 font-mono text-sm font-medium text-[#5c7360] transition group-hover:translate-x-0.5">
-              Open kiosk form →
-            </span>
-            <span className="mt-5 border-t border-dashed border-black/10 pt-4 font-mono text-[11px] text-[#8c8b81]">
-              <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#5c7360] align-middle" />
-              Kiosk 2 idle · last used 6 min ago
-            </span>
-          </Link>
+            <path d="M20 21a8 8 0 0 0-16 0" />
+            <circle cx="12" cy="8" r="4" />
+          </svg>
+          Staff
+        </Link>
+      </header>
 
-          <Link
-            href="/staff"
-            className="group flex flex-col rounded-2xl border border-black/10 bg-[#fbfaf7] p-7 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_24px_rgba(0,0,0,0.06)]"
+      <div className="flex flex-1 flex-col items-center justify-center px-4 pb-20 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-sm">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-8 w-8"
+            aria-hidden
           >
-            <span className="font-mono text-[11px] uppercase tracking-[0.15em] text-[#5c7360]">
-              Nurse Station
-            </span>
-            <span className="mt-2 font-serif text-2xl font-semibold text-[#20241f]">
-              Intake Monitor
-            </span>
-            <p className="mt-3 text-sm leading-relaxed text-[#6b6a61]">
-              See who&apos;s mid-form, who just finished, and who&apos;s been waiting — updated as
-              it happens, not on refresh.
-            </p>
-            <span className="mt-6 font-mono text-sm font-medium text-[#5c7360] transition group-hover:translate-x-0.5">
-              Open floor view →
-            </span>
-            <span className="mt-5 border-t border-dashed border-black/10 pt-4 font-mono text-[11px] text-[#8c8b81]">
-              <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#c8683f] align-middle" />
-              4 checked in this morning
-            </span>
-          </Link>
+            <rect x="6" y="4" width="12" height="17" rx="2" />
+            <path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" />
+            <path d="m9.5 13 1.8 1.8L14.5 11" />
+          </svg>
         </div>
 
-        <p className="mt-16 font-mono text-[11px] uppercase tracking-[0.15em] text-[#9b9a90]">
-          Front Desk Ops — Registration &amp; Intake
+        <h1 className="mt-6 text-3xl font-bold text-slate-900 sm:text-4xl">Welcome</h1>
+        <p className="mt-3 max-w-sm text-base leading-relaxed text-slate-600 sm:text-lg">
+          Please check in for your visit today. It only takes a few minutes.
         </p>
+
+        <Link
+          href="/patient"
+          className="mt-8 inline-flex min-h-[56px] w-full max-w-xs items-center justify-center rounded-2xl bg-blue-600 px-8 text-lg font-semibold text-white shadow-sm transition hover:bg-blue-700 active:bg-blue-800"
+        >
+          Start Check-In
+        </Link>
       </div>
     </div>
   );

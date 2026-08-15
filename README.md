@@ -12,6 +12,7 @@ The two views synchronize instantly: every keystroke (debounced) is pushed from 
 - **Framework**: Next.js 16 (App Router)
 - **Styling**: TailwindCSS v4
 - **Real-Time**: [Pusher Channels](https://pusher.com/channels/) (`pusher` on the server, `pusher-js` on the client)
+- **Data Store**: [Upstash Redis](https://upstash.com/) (`@upstash/redis`, REST-based so it works from serverless functions)
 - **Forms & Validation**: react-hook-form + Zod
 - **Hosting**: Vercel
 
@@ -28,9 +29,14 @@ npm install
 1. Sign up at [pusher.com](https://pusher.com) and create a new **Channels** app (any cluster).
 2. From the app's "App Keys" page, copy the `app_id`, `key`, `secret`, and `cluster`.
 
-### 3. Configure environment variables
+### 3. Create an Upstash Redis database
 
-Copy `.env.local.example` to `.env.local` and fill in your Pusher credentials:
+1. Sign up at [upstash.com](https://upstash.com) and create a new **Redis** database (any region; the free tier is enough).
+2. From the database's "REST API" section, copy the `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
+
+### 4. Configure environment variables
+
+Copy `.env.local.example` to `.env.local` and fill in your Pusher and Upstash credentials:
 
 ```bash
 cp .env.local.example .env.local
@@ -41,11 +47,14 @@ PUSHER_APP_ID=your-app-id
 NEXT_PUBLIC_PUSHER_KEY=your-key
 PUSHER_SECRET=your-secret
 NEXT_PUBLIC_PUSHER_CLUSTER=your-cluster
+
+UPSTASH_REDIS_REST_URL=your-upstash-rest-url
+UPSTASH_REDIS_REST_TOKEN=your-upstash-rest-token
 ```
 
-The key and cluster are prefixed with `NEXT_PUBLIC_` because the staff dashboard subscribes to updates directly from the browser; the app ID and secret stay server-side and are only used to trigger events from the API route.
+The Pusher key and cluster are prefixed with `NEXT_PUBLIC_` because the staff dashboard subscribes to updates directly from the browser; the app ID and secret stay server-side and are only used to trigger events from the API route. The Upstash credentials stay server-side only — they're used by the API route to read/write patient records.
 
-### 4. Run the dev server
+### 5. Run the dev server
 
 ```bash
 npm run dev
@@ -60,10 +69,10 @@ Open two browser windows:
 
 1. Push this repo to GitHub.
 2. Import it into [Vercel](https://vercel.com/new).
-3. Add the four environment variables from `.env.local.example` in the Vercel project settings.
+3. Add the six environment variables from `.env.local.example` in the Vercel project settings.
 4. Deploy.
 
-No custom server is required — real-time sync is handled entirely by Pusher, so the app runs on Vercel's standard serverless functions.
+No custom server is required — real-time sync is handled entirely by Pusher, and patient data lives in Upstash Redis (accessed over HTTP), so the app runs entirely on Vercel's standard serverless functions with no shared in-process state required between them.
 
 ## Project Structure
 
@@ -85,7 +94,7 @@ src/
 └── lib/
     ├── pusher-server.ts        # Server Pusher client (singleton)
     ├── pusher-client.ts        # Browser Pusher client (singleton)
-    ├── store.ts                # In-memory patient store used by the API route
+    ├── store.ts                # Upstash Redis-backed patient store, shared across all serverless instances
     ├── types.ts                # Shared PatientData / PatientStatus types
     ├── constants.ts            # Channel/event names, timing constants
     ├── patient-id.ts           # Per-tab patient session id (sessionStorage)
@@ -96,15 +105,17 @@ src/
 
 1. On mount, the patient form generates (or reuses, via `sessionStorage`) a unique `patientId` for that browser tab.
 2. As the patient types, `react-hook-form`'s `watch()` feeds the current values into `usePatientBroadcast`, which debounces changes (500ms) and `POST`s them to `/api/patients` with `status: "active"`.
-3. `/api/patients` merges the patch into an in-memory store, then calls `pusherServer.trigger()` to broadcast a `patient-update` event on the shared `patients-channel`.
+3. `/api/patients` merges the patch into the Upstash Redis-backed store, then calls `pusherServer.trigger()` to broadcast a `patient-update` event on the shared `patients-channel`.
 4. The staff dashboard subscribes to `patients-channel` via `pusher-js` and merges each incoming event into its local patient map — no polling.
 5. If the patient stops typing for 6 seconds, the form sends `status: "inactive"`. On submit, it sends `status: "submitted"` after server-side Zod validation passes; the staff card badge updates accordingly (blue "Filling in" → gray "Inactive" / green "Submitted").
 6. On tab close, `navigator.sendBeacon` best-effort notifies the server the patient went inactive.
 7. When the staff dashboard first loads, it also `GET`s `/api/patients` to hydrate with anyone already mid-form, then relies on Pusher for live updates from that point on.
 
-### Known limitation
+### Why Redis instead of an in-memory store
 
-The patient store (`src/lib/store.ts`) is in-memory, scoped to a single server process. This keeps the demo dependency-free, but on serverless platforms with multiple concurrent instances, `GET /api/patients` may not reflect state written to a different instance until Pusher's live event catches it up. For a production deployment, swap `store.ts` for a shared store (e.g. Redis, Vercel KV, or a database).
+An earlier version kept patient records in a plain in-memory `Map`. That works fine on a single long-running process, but on serverless hosting (Vercel), concurrent requests can land on different function instances with no shared memory — so a "still typing" draft request handled by one instance and the final "submitted" request handled by another could race, with whichever one happened to write last silently winning, even if it was the stale one.
+
+`src/lib/store.ts` now stores every patient record in Upstash Redis, which every instance reads and writes the same copy of. The "don't let a stale draft downgrade an already-submitted record" check is implemented as a small Lua script (`setUnlessSubmitted`) so the check-then-write is atomic *inside Redis itself* — safe even when many serverless instances call it at the same time, not just within one process.
 
 ## Design Decisions
 
