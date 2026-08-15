@@ -5,6 +5,7 @@ import { StatusIndicator } from "./StatusIndicator";
 import { Modal } from "@/components/ui/Modal";
 import { calculateAge, formatRelativeTime } from "@/lib/format";
 import { GENDER_OPTIONS } from "@/lib/constants";
+import { getEffectiveStatus } from "@/lib/patient-status";
 import type { PatientData } from "@/lib/types";
 
 interface DetailFieldProps {
@@ -50,6 +51,7 @@ export function PatientTable({ patients, now }: { patients: PatientData[]; now: 
             {patients.map((patient) => {
               const fullName = fullNameOf(patient);
               const age = patient.dateOfBirth ? calculateAge(patient.dateOfBirth) : null;
+              const effectiveStatus = getEffectiveStatus(patient, now);
               const openDetail = () => setSelectedPatient(patient);
 
               return (
@@ -65,14 +67,14 @@ export function PatientTable({ patients, now }: { patients: PatientData[]; now: 
                   tabIndex={0}
                   role="button"
                   className={`cursor-pointer border-b border-slate-100 outline-none transition last:border-0 hover:bg-slate-50 focus-visible:bg-slate-50 ${
-                    patient.status === "active" ? "bg-blue-50/40" : ""
+                    effectiveStatus === "active" ? "bg-blue-50/40" : ""
                   }`}
                 >
                   <td className="px-4 py-3 font-medium text-slate-900">
                     {fullName || "Unnamed patient"}
                   </td>
                   <td className="px-4 py-3">
-                    <StatusIndicator status={patient.status} />
+                    <StatusIndicator status={effectiveStatus} />
                   </td>
                   <td className="hidden px-4 py-3 text-slate-600 sm:table-cell">{age ?? "—"}</td>
                   <td className="hidden px-4 py-3 text-slate-600 md:table-cell">
@@ -100,7 +102,7 @@ export function PatientTable({ patients, now }: { patients: PatientData[]; now: 
               <h2 className="truncate text-base font-bold text-slate-900">
                 {fullNameOf(selectedPatient) || "Unnamed patient"}
               </h2>
-              <StatusIndicator status={selectedPatient.status} />
+              <StatusIndicator status={getEffectiveStatus(selectedPatient, now)} />
             </div>
           )
         }
