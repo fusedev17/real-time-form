@@ -5,6 +5,7 @@ import { PatientList } from "./PatientList";
 import { Pagination } from "./Pagination";
 import { useStaffRealtimeSync } from "@/hooks/useRealtimeSync";
 import { useNow } from "@/hooks/useNow";
+import { getEffectiveStatus } from "@/lib/patient-status";
 import type { PatientStatus } from "@/lib/types";
 
 const FILTERS: { value: PatientStatus | "all"; label: string }[] = [
@@ -27,12 +28,14 @@ export function StaffDashboard() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return patients.filter((patient) => {
-      if (filter !== "all" && patient.status !== filter) return false;
+      if (filter !== "all" && getEffectiveStatus(patient, now) !== filter) return false;
       if (!q) return true;
       const name = `${patient.firstName} ${patient.middleName ?? ""} ${patient.lastName}`.toLowerCase();
       return name.includes(q) || patient.email.toLowerCase().includes(q);
     });
-  }, [patients, filter, query]);
+    // `now` is included so patients drop into/out of the "active"/"inactive" filter as
+    // they go stale, not just when the underlying patient list itself changes.
+  }, [patients, filter, query, now]);
 
   // A new search/filter/page-size changes which records match, so a page index left over from
   // the previous result set can point past the end (or just show a confusingly different
@@ -55,9 +58,9 @@ export function StaffDashboard() {
 
   const statusCounts = useMemo(() => {
     const counts: Record<PatientStatus, number> = { active: 0, inactive: 0, submitted: 0 };
-    for (const patient of patients) counts[patient.status]++;
+    for (const patient of patients) counts[getEffectiveStatus(patient, now)]++;
     return counts;
-  }, [patients]);
+  }, [patients, now]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
