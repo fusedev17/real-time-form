@@ -18,10 +18,14 @@ function createRedisClient(): Redis {
   return new Redis({ url, token });
 }
 
-const redis = globalThis.__redisClient ?? createRedisClient();
+function getRedisClient(): Redis {
+  const client = globalThis.__redisClient ?? createRedisClient();
 
-if (process.env.NODE_ENV !== "production") {
-  globalThis.__redisClient = redis;
+  if (process.env.NODE_ENV !== "production") {
+    globalThis.__redisClient = client;
+  }
+
+  return client;
 }
 
 const patientKey = (id: string) => `patient:${id}`;
@@ -71,13 +75,13 @@ function parsePatient(raw: unknown): PatientData {
 
 export const patientStore = {
   async get(id: string): Promise<PatientData | undefined> {
-    const data = await redis.get<PatientData>(patientKey(id));
+    const data = await getRedisClient().get<PatientData>(patientKey(id));
     return data ?? undefined;
   },
 
   /** Writes `patient`, unless the currently-stored record is already "submitted" and this write isn't. Returns whatever ends up persisted either way. */
   async setUnlessSubmitted(id: string, patient: PatientData): Promise<PatientData> {
-    const raw = await redis.eval(
+    const raw = await getRedisClient().eval(
       SET_UNLESS_SUBMITTED_SCRIPT,
       [patientKey(id), INDEX_KEY],
       [JSON.stringify(patient), patient.status, id]
@@ -87,14 +91,14 @@ export const patientStore = {
 
   /** Deletes the record, unless it's already "submitted" (a terminal state that stray draft/leave signals shouldn't be able to erase). Returns whether it deleted anything. */
   async deleteUnlessSubmitted(id: string): Promise<boolean> {
-    const result = await redis.eval(DELETE_UNLESS_SUBMITTED_SCRIPT, [patientKey(id), INDEX_KEY], [id]);
+    const result = await getRedisClient().eval(DELETE_UNLESS_SUBMITTED_SCRIPT, [patientKey(id), INDEX_KEY], [id]);
     return result === 1;
   },
 
   async values(): Promise<PatientData[]> {
-    const ids = await redis.smembers(INDEX_KEY);
+    const ids = await getRedisClient().smembers(INDEX_KEY);
     if (ids.length === 0) return [];
-    const records = await redis.mget<(PatientData | null)[]>(...ids.map(patientKey));
+    const records = await getRedisClient().mget<(PatientData | null)[]>(...ids.map(patientKey));
     return records.filter((p): p is PatientData => p !== null);
   },
 };
