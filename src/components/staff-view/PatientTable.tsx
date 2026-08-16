@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StatusIndicator } from "./StatusIndicator";
 import { Modal } from "@/components/ui/Modal";
 import { calculateAge, formatRelativeTime } from "@/lib/format";
@@ -28,6 +28,35 @@ function fullNameOf(patient: PatientData): string {
 
 export function PatientTable({ patients, now }: { patients: PatientData[]; now: number }) {
   const [selectedPatient, setSelectedPatient] = useState<PatientData | null>(null);
+  const [trackedPatients, setTrackedPatients] = useState(patients);
+  const [newIds, setNewIds] = useState<Set<string>>(new Set());
+  const [flashIds, setFlashIds] = useState<Set<string>>(new Set());
+
+  // Diff against the previous render's patient list to flag rows that just arrived or
+  // changed, so they can be visually called out. Done during render (not an effect) so
+  // the flagged ids are already correct on the render that shows the new data.
+  if (patients !== trackedPatients) {
+    const prevUpdatedAt = new Map(trackedPatients.map((p) => [p.id, p.updatedAt]));
+    const freshlyNew = new Set<string>();
+    const freshlyUpdated = new Set<string>();
+    for (const patient of patients) {
+      const prev = prevUpdatedAt.get(patient.id);
+      if (prev === undefined) freshlyNew.add(patient.id);
+      else if (prev !== patient.updatedAt) freshlyUpdated.add(patient.id);
+    }
+    setTrackedPatients(patients);
+    if (freshlyNew.size > 0) setNewIds((current) => new Set([...current, ...freshlyNew]));
+    if (freshlyUpdated.size > 0) setFlashIds((current) => new Set([...current, ...freshlyUpdated]));
+  }
+
+  useEffect(() => {
+    if (newIds.size === 0 && flashIds.size === 0) return;
+    const timer = setTimeout(() => {
+      setNewIds(new Set());
+      setFlashIds(new Set());
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [newIds, flashIds]);
 
   const genderLabel = selectedPatient
     ? GENDER_OPTIONS.find((option) => option.value === selectedPatient.gender)?.label
@@ -68,6 +97,8 @@ export function PatientTable({ patients, now }: { patients: PatientData[]; now: 
                   role="button"
                   className={`cursor-pointer border-b border-slate-100 outline-none transition last:border-0 hover:bg-slate-50 focus-visible:bg-slate-50 ${
                     effectiveStatus === "active" ? "bg-blue-50/40" : ""
+                  } ${newIds.has(patient.id) ? "animate-fade-in-up" : ""} ${
+                    flashIds.has(patient.id) ? "animate-row-flash" : ""
                   }`}
                 >
                   <td className="px-4 py-3 font-medium text-slate-900">

@@ -36,12 +36,18 @@ async function deletePatient(id: string) {
   });
 }
 
+export type SyncStatus = "idle" | "syncing" | "synced";
+
 /** Patient-side: debounces form input and broadcasts active/inactive/submitted state. */
 export function usePatientBroadcast(id: string, values: PatientFormValues, enabled: boolean) {
   const debouncedValues = useDebounce(values, SYNC_DEBOUNCE_MS);
   const [submitted, setSubmitted] = useState(false);
+  const [hasSynced, setHasSynced] = useState(false);
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasSyncedOnce = useRef(false);
+
+  const isPending = enabled && !submitted && JSON.stringify(values) !== JSON.stringify(debouncedValues);
+  const syncStatus: SyncStatus = isPending ? "syncing" : hasSynced ? "synced" : "idle";
 
   const clearInactivityTimer = useCallback(() => {
     if (inactivityTimer.current) {
@@ -71,7 +77,9 @@ export function usePatientBroadcast(id: string, values: PatientFormValues, enabl
     }
 
     hasSyncedOnce.current = true;
-    void postPatientUpdate(id, "active", debouncedValues);
+    void postPatientUpdate(id, "active", debouncedValues).then((res) => {
+      if (res.ok) setHasSynced(true);
+    });
     scheduleInactivity();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedValues, enabled, submitted]);
@@ -106,13 +114,36 @@ export function usePatientBroadcast(id: string, values: PatientFormValues, enabl
     [id, clearInactivityTimer]
   );
 
-  return { submitted, submit };
+  return { submitted, submit, syncStatus };
+}
+
+export interface StaffNotification {
+  id: string;
+  message: string;
+  tone: "blue" | "green";
+}
+
+const MAX_NOTIFICATIONS = 3;
+
+function fullNameOf(patient: PatientData): string {
+  return [patient.firstName, patient.lastName].filter(Boolean).join(" ").trim();
 }
 
 /** Staff-side: loads current patients and keeps them in sync over Pusher. */
 export function useStaffRealtimeSync() {
   const [patients, setPatients] = useState<Record<string, PatientData>>({});
   const [connectionState, setConnectionState] = useState("connecting");
+  const [notifications, setNotifications] = useState<StaffNotification[]>([]);
+  const hasLoadedInitial = useRef(false);
+
+  const pushNotification = useCallback((message: string, tone: StaffNotification["tone"]) => {
+    const notification = { id: `${Date.now()}-${Math.random()}`, message, tone };
+    setNotifications((prev) => [...prev.slice(-(MAX_NOTIFICATIONS - 1)), notification]);
+  }, []);
+
+  const dismissNotification = useCallback((id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,6 +153,7 @@ export function useStaffRealtimeSync() {
       .then((data: PatientData[]) => {
         if (cancelled) return;
         setPatients(Object.fromEntries(data.map((p) => [p.id, p])));
+        hasLoadedInitial.current = true;
       })
       .catch(() => {});
 
@@ -131,7 +163,19 @@ export function useStaffRealtimeSync() {
 
     const channel = pusher.subscribe(PATIENTS_CHANNEL);
     const handleUpdate = (patient: PatientData) => {
-      setPatients((prev) => ({ ...prev, [patient.id]: patient }));
+      setPatients((prev) => {
+        // Only surface a toast for genuinely new live activity, not the initial page hydration.
+        if (hasLoadedInitial.current) {
+          const existing = prev[patient.id];
+          const name = fullNameOf(patient);
+          if (!existing) {
+            pushNotification(`${name || "A new patient"} checked in`, "blue");
+          } else if (existing.status !== "submitted" && patient.status === "submitted") {
+            pushNotification(`${name || "A patient"} submitted their form`, "green");
+          }
+        }
+        return { ...prev, [patient.id]: patient };
+      });
     };
     const handleRemove = ({ id }: { id: string }) => {
       setPatients((prev) => {
@@ -151,12 +195,12 @@ export function useStaffRealtimeSync() {
       pusher.unsubscribe(PATIENTS_CHANNEL);
       pusher.connection.unbind("state_change", handleStateChange);
     };
-  }, []);
+  }, [pushNotification]);
 
   const patientList = useMemo(
     () => Object.values(patients).sort((a, b) => b.updatedAt - a.updatedAt),
     [patients]
   );
 
-  return { patients: patientList, connectionState };
+  return { patients: patientList, connectionState, notifications, dismissNotification };
 }
