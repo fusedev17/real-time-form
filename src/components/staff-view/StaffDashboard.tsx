@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { PatientList } from "./PatientList";
 import { Pagination } from "./Pagination";
+import { ToastStack } from "@/components/ui/Toast";
 import { useStaffRealtimeSync } from "@/hooks/useRealtimeSync";
 import { useNow } from "@/hooks/useNow";
 import { getEffectiveStatus } from "@/lib/patient-status";
@@ -18,7 +19,7 @@ const FILTERS: { value: PatientStatus | "all"; label: string }[] = [
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 export function StaffDashboard() {
-  const { patients, connectionState } = useStaffRealtimeSync();
+  const { patients, connectionState, notifications, dismissNotification } = useStaffRealtimeSync();
   const now = useNow();
   const [filter, setFilter] = useState<PatientStatus | "all">("all");
   const [query, setQuery] = useState("");
@@ -156,6 +157,8 @@ export function StaffDashboard() {
           <Pagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
         </div>
       )}
+
+      <ToastStack toasts={notifications} onDismiss={dismissNotification} />
     </div>
   );
 }
